@@ -9,8 +9,13 @@ inputs:
     description: 邮件标题
     required: true
   body:
-    description: 邮件正文（纯文本）
-    required: true
+    description: 邮件正文（纯文本）；与 html 至少提供一个
+    required: false
+    default: ''
+  html:
+    description: 邮件正文（HTML）；与 body 至少提供一个
+    required: false
+    default: ''
   to:
     description: 收件人，缺省使用 notify-worker 的 DEFAULT_TO
     required: false
@@ -46,6 +51,7 @@ runs:
       env:
         SUBJECT: ${{ inputs.subject }}
         BODY: ${{ inputs.body }}
+        HTML: ${{ inputs.html }}
         TO: ${{ inputs.to }}
         DEDUP_KEY: ${{ inputs.dedup-key }}
         FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
@@ -87,10 +93,19 @@ runs:
         import json
         import os
 
-        data = {
-            "subject": os.environ["SUBJECT"],
-            "body": os.environ["BODY"],
-        }
+        subject = os.environ["SUBJECT"].strip()
+        body = os.environ.get("BODY", "").strip()
+        html = os.environ.get("HTML", "").strip()
+        if not subject:
+            raise SystemExit("subject is required")
+        if not body and not html:
+            raise SystemExit("body and html cannot both be empty")
+
+        data = {"subject": subject}
+        if body:
+            data["body"] = body
+        if html:
+            data["html"] = html
         to = os.environ.get("TO", "").strip()
         if to:
             data["to"] = to

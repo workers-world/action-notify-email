@@ -47,10 +47,13 @@ jobs:
 | 名称 | 必填 | 默认 | 说明 |
 |---|---|---|---|
 | `subject` | 是 | — | 邮件标题 |
-| `body` | 是 | — | 纯文本正文 |
+| `body` | 否* | — | 纯文本正文 |
+| `html` | 否* | — | HTML 正文 |
 | `to` | 否 | — | 收件人；缺省用 notify-worker `DEFAULT_TO` |
 | `dedup-key` | 否 | — | KV 去重键，建议 `workflow-sha` |
 | `fail-on-error` | 否 | `true` | 发信失败是否 fail job |
+
+\* `body` 与 `html` 至少提供一个。
 
 ## Outputs
 
