@@ -1,0 +1,20 @@
+name: Validate action
+
+on:
+  push:
+    branches:
+      - dev_*
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check action metadata
+        run: |
+          test -f action.yml
+          grep -q 'name: Send notify email' action.yml
+          grep -q 'X-Notify-Source: github-actions' action.yml

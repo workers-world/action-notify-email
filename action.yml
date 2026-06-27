@@ -1,0 +1,153 @@
+name: Send notify email
+description: 通过 notify-worker 发送邮件（GitHub Actions 代理层）
+branding:
+  icon: mail
+  color: blue
+
+inputs:
+  subject:
+    description: 邮件标题
+    required: true
+  body:
+    description: 邮件正文（纯文本）
+    required: true
+  to:
+    description: 收件人，缺省使用 notify-worker 的 DEFAULT_TO
+    required: false
+    default: ''
+  dedup-key:
+    description: 去重键，建议 workflow-sha 或 workflow-run_id
+    required: false
+    default: ''
+  fail-on-error:
+    description: 发信失败时是否 fail job
+    required: false
+    default: 'true'
+
+outputs:
+  ok:
+    description: 是否成功（含去重跳过）
+    value: ${{ steps.send.outputs.ok }}
+  skipped:
+    description: 是否因去重跳过
+    value: ${{ steps.send.outputs.skipped }}
+  id:
+    description: Resend message id
+    value: ${{ steps.send.outputs.id }}
+  error:
+    description: 错误信息
+    value: ${{ steps.send.outputs.error }}
+
+runs:
+  using: composite
+  steps:
+    - id: send
+      shell: bash
+      env:
+        SUBJECT: ${{ inputs.subject }}
+        BODY: ${{ inputs.body }}
+        TO: ${{ inputs.to }}
+        DEDUP_KEY: ${{ inputs.dedup-key }}
+        FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
+        NOTIFY_WORKER_URL: ${{ env.NOTIFY_WORKER_URL }}
+        NOTIFY_AUTH_TOKEN: ${{ env.NOTIFY_AUTH_TOKEN }}
+      run: |
+        set -euo pipefail
+
+        write_failure() {
+          local message="$1"
+          echo "ok=false" >> "$GITHUB_OUTPUT"
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+          echo "id=" >> "$GITHUB_OUTPUT"
+          echo "error=${message}" >> "$GITHUB_OUTPUT"
+        }
+
+        if [ -z "${NOTIFY_WORKER_URL:-}" ]; then
+          write_failure "NOTIFY_WORKER_URL is required"
+          if [ "$FAIL_ON_ERROR" = "true" ]; then
+            echo "::error::NOTIFY_WORKER_URL is required"
+            exit 1
+          fi
+          exit 0
+        fi
+
+        if [ -z "${NOTIFY_AUTH_TOKEN:-}" ]; then
+          write_failure "NOTIFY_AUTH_TOKEN is required (use NOTIFY_GHA_TOKEN secret value)"
+          if [ "$FAIL_ON_ERROR" = "true" ]; then
+            echo "::error::NOTIFY_AUTH_TOKEN is required"
+            exit 1
+          fi
+          exit 0
+        fi
+
+        base_url="${NOTIFY_WORKER_URL%/}"
+        endpoint="${base_url}/v1/send"
+
+        payload=$(python3 - <<'PY'
+        import json
+        import os
+
+        data = {
+            "subject": os.environ["SUBJECT"],
+            "body": os.environ["BODY"],
+        }
+        to = os.environ.get("TO", "").strip()
+        if to:
+            data["to"] = to
+        dedup = os.environ.get("DEDUP_KEY", "").strip()
+        if dedup:
+            data["dedupKey"] = dedup
+        print(json.dumps(data, ensure_ascii=False))
+        PY
+        )
+
+        send_once() {
+          curl -sS -w "\n%{http_code}" -X POST "$endpoint" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${NOTIFY_AUTH_TOKEN}" \
+            -H "X-Notify-Source: github-actions" \
+            --data-binary "$payload"
+        }
+
+        parse_response() {
+          local raw="$1"
+          HTTP_CODE="$(printf '%s' "$raw" | tail -n1)"
+          BODY="$(printf '%s' "$raw" | sed '$d')"
+
+          OK="$(printf '%s' "$BODY" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("true" if d.get("ok") else "false")' 2>/dev/null || echo false)"
+          SKIPPED="$(printf '%s' "$BODY" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("true" if d.get("skipped") else "false")' 2>/dev/null || echo false)"
+          ID="$(printf '%s' "$BODY" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("id") or "")' 2>/dev/null || true)"
+          ERROR="$(printf '%s' "$BODY" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("error") or "")' 2>/dev/null || true)"
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ] && [ "$OK" = "true" ]; then
+            return 0
+          fi
+
+          if [ -z "$ERROR" ]; then
+            ERROR="HTTP ${HTTP_CODE}"
+          fi
+          return 1
+        }
+
+        if ! parse_response "$(send_once)"; then
+          sleep 0.3
+          if ! parse_response "$(send_once)"; then
+            write_failure "$ERROR"
+            echo "::error::notify-worker send failed: ${ERROR}"
+            if [ "$FAIL_ON_ERROR" = "true" ]; then
+              exit 1
+            fi
+            exit 0
+          fi
+        fi
+
+        echo "ok=${OK}" >> "$GITHUB_OUTPUT"
+        echo "skipped=${SKIPPED}" >> "$GITHUB_OUTPUT"
+        echo "id=${ID}" >> "$GITHUB_OUTPUT"
+        echo "error=" >> "$GITHUB_OUTPUT"
+
+        if [ "$SKIPPED" = "true" ]; then
+          echo "notify skipped (dedup)"
+        else
+          echo "notify sent id=${ID}"
+        fi
