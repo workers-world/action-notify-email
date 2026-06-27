@@ -10,6 +10,8 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Shanghai
     steps:
       - uses: actions/checkout@v4
 
@@ -18,3 +20,4 @@ jobs:
           test -f action.yml
           grep -q 'name: Send notify email' action.yml
           grep -q 'X-Notify-Source: github-actions' action.yml
+          grep -q 'TZ: Asia/Shanghai' action.yml

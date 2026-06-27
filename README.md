@@ -68,6 +68,7 @@ jobs:
 
 - `POST {NOTIFY_WORKER_URL}/v1/send`，Bearer `NOTIFY_AUTH_TOKEN`
 - Header `X-Notify-Source: github-actions`
+- 运行环境时区固定为 `Asia/Shanghai`（`TZ` env），日志时间戳为上海时间
 - 失败时 300ms 后重试 1 次（与 orchestrator notify step 一致）
 - 日志不输出 token
 

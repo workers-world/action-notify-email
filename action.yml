@@ -49,6 +49,7 @@ runs:
     - id: send
       shell: bash
       env:
+        TZ: Asia/Shanghai
         SUBJECT: ${{ inputs.subject }}
         BODY: ${{ inputs.body }}
         HTML: ${{ inputs.html }}
@@ -162,7 +163,7 @@ runs:
         echo "error=" >> "$GITHUB_OUTPUT"
 
         if [ "$SKIPPED" = "true" ]; then
-          echo "notify skipped (dedup)"
+          echo "notify skipped (dedup) at $(date '+%Y-%m-%d %H:%M:%S %Z')"
         else
-          echo "notify sent id=${ID}"
+          echo "notify sent id=${ID} at $(date '+%Y-%m-%d %H:%M:%S %Z')"
         fi
