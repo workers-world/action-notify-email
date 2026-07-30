@@ -2,9 +2,9 @@ name: Validate action
 
 on:
   push:
-    branches:
-      - dev_*
+    branches: [master]
   pull_request:
+    branches: [master]
   workflow_dispatch:
 
 jobs:
