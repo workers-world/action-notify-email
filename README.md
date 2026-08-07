@@ -4,17 +4,17 @@ GitHub Composite Action：作为 [notify-worker](../notify-worker/) 在 GitHub �
 
 ## 快速接入
 
-### 1. Org / 仓库 Secrets
+### 1. Org / 仓库配置
 
-在 GitHub Organization（推荐）或单个仓库 Settings → Secrets and variables → Actions 中配置：
+在 GitHub Organization（推荐）Settings → Secrets and variables → Actions 中配置：
 
-| Secret | 说明 |
-|---|---|
-| `NOTIFY_WORKER_URL` | notify-worker 公开地址（不含路径），如 `https://notify-worker.<account>.workers.dev` |
-| `NOTIFY_GHA_TOKEN` | 与 notify-worker 侧 `NOTIFY_GHA_TOKEN` wrangler secret **同值** |
+| 名称 | 类型 | 说明 |
+|---|---|---|
+| `NOTIFY_WORKER_URL` | **Variable** | notify-worker 公开地址（不含路径），如 `https://notify-worker.<account>.workers.dev` |
+| `NOTIFY_GHA_TOKEN` | **Secret** | 与 notify-worker 侧 `NOTIFY_GHA_TOKEN` wrangler secret **同值** |
 
 > Worker 部署与 token 说明见 [notify-worker/README.md](../notify-worker/README.md)。  
-> Org Secrets 配置见 [docs/ORG_SECRETS.md](docs/ORG_SECRETS.md)。
+> Org 配置见 [docs/ORG_SECRETS.md](docs/ORG_SECRETS.md)。
 
 ### 2. Workflow 引用
 
@@ -36,7 +36,7 @@ jobs:
             Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           dedup-key: "${{ github.workflow }}-${{ github.sha }}"
         env:
-          NOTIFY_WORKER_URL: ${{ secrets.NOTIFY_WORKER_URL }}
+          NOTIFY_WORKER_URL: ${{ vars.NOTIFY_WORKER_URL }}
           NOTIFY_AUTH_TOKEN: ${{ secrets.NOTIFY_GHA_TOKEN }}
 ```
 
