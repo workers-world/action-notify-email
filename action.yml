@@ -71,19 +71,22 @@ runs:
 
         if [ -z "${NOTIFY_WORKER_URL:-}" ]; then
           write_failure "NOTIFY_WORKER_URL is required"
+          # vars 求值空时无 workflow_call required；fail-on-error=false 也要醒目标注
+          echo "::error::NOTIFY_WORKER_URL is required (set Org Variable NOTIFY_WORKER_URL; do not pass as secret to called workflows that no longer declare it)"
           if [ "$FAIL_ON_ERROR" = "true" ]; then
-            echo "::error::NOTIFY_WORKER_URL is required"
             exit 1
           fi
+          echo "::warning::NOTIFY_WORKER_URL empty; notify skipped (fail-on-error=false)"
           exit 0
         fi
 
         if [ -z "${NOTIFY_AUTH_TOKEN:-}" ]; then
           write_failure "NOTIFY_AUTH_TOKEN is required (use NOTIFY_GHA_TOKEN secret value)"
+          echo "::error::NOTIFY_AUTH_TOKEN is required"
           if [ "$FAIL_ON_ERROR" = "true" ]; then
-            echo "::error::NOTIFY_AUTH_TOKEN is required"
             exit 1
           fi
+          echo "::warning::NOTIFY_AUTH_TOKEN empty; notify skipped (fail-on-error=false)"
           exit 0
         fi
 

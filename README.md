@@ -71,6 +71,8 @@ jobs:
 - 运行环境时区固定为 `Asia/Shanghai`（`TZ` env），日志时间戳为上海时间
 - 失败时 300ms 后重试 1 次（与 orchestrator notify step 一致）
 - 日志不输出 token
+- `NOTIFY_WORKER_URL` / `NOTIFY_AUTH_TOKEN` 为空时始终打 `::error::`；若 `fail-on-error: false` 另打 `::warning::` 后 exit 0（Release PR `notify-blocked` 另有前置 Guard 步骤，配置缺失直接 fail job）
+- reusable workflow **勿**再 `secrets: NOTIFY_WORKER_URL`（已改为 Variable）；caller 用 `secrets: inherit` 仅继承 `NOTIFY_GHA_TOKEN`
 
 ## 发布
 
