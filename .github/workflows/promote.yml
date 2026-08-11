@@ -1,6 +1,7 @@
 name: Promote to master
 
-# 任意 dev_* 上 CI（push）绿 → FF 该分支到 master；切新轨无需改本文件。
+# Validate 绿 → 开/复用 Release PR → auto merge（禁止直推 master）。
+# 由 worker-promote 执行；须 Org Secret WORKERS_WORLD_GHA_TOKEN。
 on:
   workflow_run:
     workflows: ["Validate action"]
@@ -15,14 +16,14 @@ on:
 
 jobs:
   promote:
-    permissions:
-      contents: write
+    # 写操作走 PAT；勿 contents:write 直推
+    permissions: {}
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' &&
        startsWith(github.event.workflow_run.head_branch, 'dev_'))
-    uses: workers-world/.github/.github/workflows/worker-promote.yml@actions/v0.4.5
+    uses: workers-world/.github/.github/workflows/worker-promote.yml@actions/v0.4.6
     with:
       release_branch: ${{ github.event_name == 'workflow_dispatch' && inputs.release_branch || github.event.workflow_run.head_branch }}
     secrets: inherit
