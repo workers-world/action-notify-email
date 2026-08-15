@@ -34,6 +34,16 @@ jobs:
             Workflow: ${{ github.workflow }}
             Branch: ${{ github.ref_name }}
             Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # 推荐同时传 html，邮件客户端中链接可直接点击
+          html: |
+            <div style="font-family:system-ui,sans-serif;line-height:1.5">
+              <p><strong>CI 失败</strong></p>
+              <ul>
+                <li>Workflow: ${{ github.workflow }}</li>
+                <li>Branch: ${{ github.ref_name }}</li>
+                <li>Run: <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">查看 workflow run</a></li>
+              </ul>
+            </div>
           dedup-key: "${{ github.workflow }}-${{ github.sha }}"
         env:
           NOTIFY_WORKER_URL: ${{ vars.NOTIFY_WORKER_URL }}
@@ -41,6 +51,8 @@ jobs:
 ```
 
 `NOTIFY_AUTH_TOKEN` 是 Action 运行时 env 名（固定）；值来自仓库/Org 的 `NOTIFY_GHA_TOKEN` secret。
+
+仅传 `body`（无 `html`）时，notify-worker 会把正文中的 `http(s)://` URL **自动 linkify** 成可点击链接；显式 `html` 不会被覆盖。
 
 ## Inputs
 
