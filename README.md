@@ -60,12 +60,13 @@ jobs:
 |---|---|---|---|
 | `subject` | 是 | — | 邮件标题 |
 | `body` | 否* | — | 纯文本正文 |
+| `body-file` | 否* | — | 从文件读取纯文本正文；与 `body` 同时存在时优先 `body-file` |
 | `html` | 否* | — | HTML 正文 |
 | `to` | 否 | — | 收件人；缺省用 notify-worker `DEFAULT_TO` |
 | `dedup-key` | 否 | — | KV 去重键，建议 `workflow-sha` |
 | `fail-on-error` | 否 | `true` | 发信失败是否 fail job |
 
-\* `body` 与 `html` 至少提供一个。
+\* `body` / `body-file` 与 `html` 至少提供一个。
 
 ## Outputs
 

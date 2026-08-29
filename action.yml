@@ -12,6 +12,10 @@ inputs:
     description: 邮件正文（纯文本）；与 html 至少提供一个
     required: false
     default: ''
+  body-file:
+    description: 从文件读取纯文本正文；与 body 同时存在时优先 body-file
+    required: false
+    default: ''
   html:
     description: 邮件正文（HTML）；与 body 至少提供一个
     required: false
@@ -52,6 +56,7 @@ runs:
         TZ: Asia/Shanghai
         SUBJECT: ${{ inputs.subject }}
         BODY: ${{ inputs.body }}
+        BODY_FILE: ${{ inputs.body-file }}
         HTML: ${{ inputs.html }}
         TO: ${{ inputs.to }}
         DEDUP_KEY: ${{ inputs.dedup-key }}
@@ -98,7 +103,12 @@ runs:
         import os
 
         subject = os.environ["SUBJECT"].strip()
-        body = os.environ.get("BODY", "").strip()
+        body_file = os.environ.get("BODY_FILE", "").strip()
+        if body_file:
+            with open(body_file, encoding="utf-8") as handle:
+                body = handle.read()
+        else:
+            body = os.environ.get("BODY", "").strip()
         html = os.environ.get("HTML", "").strip()
         if not subject:
             raise SystemExit("subject is required")
