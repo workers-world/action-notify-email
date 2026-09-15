@@ -12,6 +12,10 @@ inputs:
     description: 邮件正文（纯文本）；与 html 至少提供一个
     required: false
     default: ''
+  body-file:
+    description: 从文件读取纯文本正文；与 body 同时存在时优先 body-file
+    required: false
+    default: ''
   html:
     description: 邮件正文（HTML）；与 body 至少提供一个
     required: false
@@ -52,6 +56,7 @@ runs:
         TZ: Asia/Shanghai
         SUBJECT: ${{ inputs.subject }}
         BODY: ${{ inputs.body }}
+        BODY_FILE: ${{ inputs.body-file }}
         HTML: ${{ inputs.html }}
         TO: ${{ inputs.to }}
         DEDUP_KEY: ${{ inputs.dedup-key }}
@@ -71,19 +76,22 @@ runs:
 
         if [ -z "${NOTIFY_WORKER_URL:-}" ]; then
           write_failure "NOTIFY_WORKER_URL is required"
+          # vars 求值空时无 workflow_call required；fail-on-error=false 也要醒目标注
+          echo "::error::NOTIFY_WORKER_URL is required (set Org Variable NOTIFY_WORKER_URL; do not pass as secret to called workflows that no longer declare it)"
           if [ "$FAIL_ON_ERROR" = "true" ]; then
-            echo "::error::NOTIFY_WORKER_URL is required"
             exit 1
           fi
+          echo "::warning::NOTIFY_WORKER_URL empty; notify skipped (fail-on-error=false)"
           exit 0
         fi
 
         if [ -z "${NOTIFY_AUTH_TOKEN:-}" ]; then
           write_failure "NOTIFY_AUTH_TOKEN is required (use NOTIFY_GHA_TOKEN secret value)"
+          echo "::error::NOTIFY_AUTH_TOKEN is required"
           if [ "$FAIL_ON_ERROR" = "true" ]; then
-            echo "::error::NOTIFY_AUTH_TOKEN is required"
             exit 1
           fi
+          echo "::warning::NOTIFY_AUTH_TOKEN empty; notify skipped (fail-on-error=false)"
           exit 0
         fi
 
@@ -95,7 +103,12 @@ runs:
         import os
 
         subject = os.environ["SUBJECT"].strip()
-        body = os.environ.get("BODY", "").strip()
+        body_file = os.environ.get("BODY_FILE", "").strip()
+        if body_file:
+            with open(body_file, encoding="utf-8") as handle:
+                body = handle.read()
+        else:
+            body = os.environ.get("BODY", "").strip()
         html = os.environ.get("HTML", "").strip()
         if not subject:
             raise SystemExit("subject is required")

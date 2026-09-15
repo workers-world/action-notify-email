@@ -4,17 +4,17 @@ GitHub Composite Action：作为 [notify-worker](../notify-worker/) 在 GitHub �
 
 ## 快速接入
 
-### 1. Org / 仓库 Secrets
+### 1. Org / 仓库配置
 
-在 GitHub Organization（推荐）或单个仓库 Settings → Secrets and variables → Actions 中配置：
+在 GitHub Organization（推荐）Settings → Secrets and variables → Actions 中配置：
 
-| Secret | 说明 |
-|---|---|
-| `NOTIFY_WORKER_URL` | notify-worker 公开地址（不含路径），如 `https://notify-worker.<account>.workers.dev` |
-| `NOTIFY_GHA_TOKEN` | 与 notify-worker 侧 `NOTIFY_GHA_TOKEN` wrangler secret **同值** |
+| 名称 | 类型 | 说明 |
+|---|---|---|
+| `NOTIFY_WORKER_URL` | **Variable** | notify-worker 公开地址（不含路径），如 `https://notify-worker.<account>.workers.dev` |
+| `NOTIFY_GHA_TOKEN` | **Secret** | 与 notify-worker 侧 `NOTIFY_GHA_TOKEN` wrangler secret **同值** |
 
 > Worker 部署与 token 说明见 [notify-worker/README.md](../notify-worker/README.md)。  
-> Org Secrets 配置见 [docs/ORG_SECRETS.md](docs/ORG_SECRETS.md)。
+> Org 配置见 [docs/ORG_SECRETS.md](docs/ORG_SECRETS.md)。
 
 ### 2. Workflow 引用
 
@@ -34,13 +34,25 @@ jobs:
             Workflow: ${{ github.workflow }}
             Branch: ${{ github.ref_name }}
             Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # 推荐同时传 html，邮件客户端中链接可直接点击
+          html: |
+            <div style="font-family:system-ui,sans-serif;line-height:1.5">
+              <p><strong>CI 失败</strong></p>
+              <ul>
+                <li>Workflow: ${{ github.workflow }}</li>
+                <li>Branch: ${{ github.ref_name }}</li>
+                <li>Run: <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">查看 workflow run</a></li>
+              </ul>
+            </div>
           dedup-key: "${{ github.workflow }}-${{ github.sha }}"
         env:
-          NOTIFY_WORKER_URL: ${{ secrets.NOTIFY_WORKER_URL }}
+          NOTIFY_WORKER_URL: ${{ vars.NOTIFY_WORKER_URL }}
           NOTIFY_AUTH_TOKEN: ${{ secrets.NOTIFY_GHA_TOKEN }}
 ```
 
 `NOTIFY_AUTH_TOKEN` 是 Action 运行时 env 名（固定）；值来自仓库/Org 的 `NOTIFY_GHA_TOKEN` secret。
+
+仅传 `body`（无 `html`）时，notify-worker 会把正文中的 `http(s)://` URL **自动 linkify** 成可点击链接；显式 `html` 不会被覆盖。
 
 ## Inputs
 
@@ -48,12 +60,13 @@ jobs:
 |---|---|---|---|
 | `subject` | 是 | — | 邮件标题 |
 | `body` | 否* | — | 纯文本正文 |
+| `body-file` | 否* | — | 从文件读取纯文本正文；与 `body` 同时存在时优先 `body-file` |
 | `html` | 否* | — | HTML 正文 |
 | `to` | 否 | — | 收件人；缺省用 notify-worker `DEFAULT_TO` |
 | `dedup-key` | 否 | — | KV 去重键，建议 `workflow-sha` |
 | `fail-on-error` | 否 | `true` | 发信失败是否 fail job |
 
-\* `body` 与 `html` 至少提供一个。
+\* `body` / `body-file` 与 `html` 至少提供一个。
 
 ## Outputs
 
@@ -71,6 +84,8 @@ jobs:
 - 运行环境时区固定为 `Asia/Shanghai`（`TZ` env），日志时间戳为上海时间
 - 失败时 300ms 后重试 1 次（与 orchestrator notify step 一致）
 - 日志不输出 token
+- `NOTIFY_WORKER_URL` / `NOTIFY_AUTH_TOKEN` 为空时始终打 `::error::`；若 `fail-on-error: false` 另打 `::warning::` 后 exit 0（Release PR `notify-blocked` 另有前置 Guard 步骤，配置缺失直接 fail job）
+- reusable workflow **勿**再 `secrets: NOTIFY_WORKER_URL`（已改为 Variable）；caller 用 `secrets: inherit` 仅继承 `NOTIFY_GHA_TOKEN`
 
 ## 发布
 
