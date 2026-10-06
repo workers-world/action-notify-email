@@ -22,4 +22,60 @@ jobs:
           grep -q 'X-Notify-Source: github-actions' action.yml
           grep -q 'TZ: Asia/Shanghai' action.yml
           grep -q 'html-file:' action.yml
+          grep -q 'attachment-file:' action.yml
+          grep -q 'attachment-filename:' action.yml
+          grep -q 'attachment-content-type:' action.yml
+          grep -q 'contentBase64' action.yml
           grep -qE 'data-binary "@\$\{PAYLOAD_FILE\}"' action.yml
+
+      - name: Verify attachment payload shape
+        run: |
+          set -euo pipefail
+          printf 'repo,sha\nworkers-world/foo,abc\n' > /tmp/commit-digest.csv
+          export SUBJECT=test
+          export HTML='<p>digest</p>'
+          export ATTACHMENT_FILE=/tmp/commit-digest.csv
+          export ATTACHMENT_FILENAME=commit-digest.csv
+          export ATTACHMENT_CONTENT_TYPE=text/csv
+          export PAYLOAD_FILE="$(mktemp)"
+          python3 - <<'PY'
+          import base64
+          import json
+          import mimetypes
+          import os
+          from pathlib import Path
+
+          def infer_content_type(path: str) -> str:
+              ext = Path(path).suffix.lower()
+              if ext == ".csv":
+                  return "text/csv"
+              guessed, _ = mimetypes.guess_type(path)
+              return guessed or "application/octet-stream"
+
+          subject = os.environ["SUBJECT"].strip()
+          html = os.environ.get("HTML", "").strip()
+          data = {"subject": subject, "html": html}
+          attachment_file = os.environ.get("ATTACHMENT_FILE", "").strip()
+          if attachment_file:
+              filename = os.environ.get("ATTACHMENT_FILENAME", "").strip() or os.path.basename(attachment_file)
+              content_type = os.environ.get("ATTACHMENT_CONTENT_TYPE", "").strip() or infer_content_type(attachment_file)
+              with open(attachment_file, "rb") as handle:
+                  content_base64 = base64.b64encode(handle.read()).decode("ascii")
+              data["attachments"] = [{"filename": filename, "contentBase64": content_base64, "contentType": content_type}]
+          with open(os.environ["PAYLOAD_FILE"], "w", encoding="utf-8") as handle:
+              json.dump(data, handle, ensure_ascii=False)
+          PY
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+
+          with open(os.environ["PAYLOAD_FILE"], encoding="utf-8") as handle:
+              data = json.load(handle)
+          att = data["attachments"][0]
+          assert att["filename"] == "commit-digest.csv"
+          assert att["contentType"] == "text/csv"
+          decoded = base64.b64decode(att["contentBase64"]).decode("utf-8")
+          assert "workers-world/foo" in decoded
+          PY
+          rm -f "$PAYLOAD_FILE" /tmp/commit-digest.csv
