@@ -27,7 +27,7 @@ jobs:
 
       - name: Notify on failure
         if: failure()
-        uses: ONGOING-Z/action-notify-email@v1
+        uses: workers-world/action-notify-email@v1
         with:
           subject: "CI 失败: ${{ github.repository }}"
           body: |
@@ -89,11 +89,13 @@ jobs:
 
 ## 发布
 
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-git tag -f v1 && git push origin v1 -f   # 主版本指针
-```
+**不要手工打 tag。** 发布全自动：
+
+1. 功能 PR 合入当前 `dev_*` → Validate 绿 → Promote 开/合 Release PR（`dev_*` → `master`）
+2. push `master` 触发 [`release-tag.yml`](.github/workflows/release-tag.yml)：在最新 `vX.Y.Z` 上 patch+1 打不可变 tag，并把主版本指针 `v1` 前移到同一提交
+3. `vX.Y.Z` tag 触发 [`gh-release-on-tag.yml`](.github/workflows/gh-release-on-tag.yml) 建 GitHub Release 页
+
+minor / major：Actions → **Release action tag** → Run workflow（branch 选 `master`），填写 `version`（如 `1.2.0`）。
 
 消费方引用 `@v1` 即可跟踪同主版本更新。
 
