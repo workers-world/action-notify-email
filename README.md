@@ -61,12 +61,26 @@ jobs:
 | `subject` | 是 | — | 邮件标题 |
 | `body` | 否* | — | 纯文本正文 |
 | `body-file` | 否* | — | 从文件读取纯文本正文；与 `body` 同时存在时优先 `body-file` |
-| `html` | 否* | — | HTML 正文 |
+| `html` | 否* | — | HTML 正文（大体积 digest 请改用 `html-file`，避免 Actions 日志打印 `with:` 且绕过 shell ARG_MAX） |
+| `html-file` | 否* | — | 从文件读取 HTML 正文；与 `html` 同时存在时优先 `html-file` |
 | `to` | 否 | — | 收件人；缺省用 notify-worker `DEFAULT_TO` |
 | `dedup-key` | 否 | — | KV 去重键，建议 `workflow-sha` |
 | `fail-on-error` | 否 | `true` | 发信失败是否 fail job |
 
-\* `body` / `body-file` 与 `html` 至少提供一个。
+\* `body` / `body-file` 与 `html` / `html-file` 至少提供一个。
+
+大 HTML（如 weekly digest）建议先写入文件再传 `html-file`，例如：
+
+```yaml
+- run: printf '%s' "$HTML" > digest.html
+  env:
+    HTML: ${{ steps.build.outputs.html }}
+- uses: workers-world/action-notify-email@v1
+  with:
+    subject: Weekly digest
+    html-file: digest.html
+    dedup-key: digest-${{ github.sha }}
+```
 
 ## Outputs
 
