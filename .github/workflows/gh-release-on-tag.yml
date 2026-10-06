@@ -1,0 +1,19 @@
+# push vX.Y.Z tag（由 release-tag.yml 自动打）→ GitHub Release 页面。
+# 浮动主版本 tag（v1）不匹配 v*.*.*，不建 Release。
+# 说明见 workers-world/worker-actions docs/gh-release.md
+name: Create GitHub Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    uses: workers-world/worker-actions/.github/workflows/create-gh-release.yml@actions/v0.2.3
+    secrets: inherit
+    with:
+      tag_name: ${{ github.ref_name }}

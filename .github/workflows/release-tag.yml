@@ -1,0 +1,126 @@
+name: Release action tag
+
+# Release PR（dev_* → master）合入 = push master → 自动打 tag，禁止手工打 tag：
+#   1. 不可变 vX.Y.Z（默认在最新 vX.Y.Z 上 patch+1；HEAD 已有则复用，幂等）
+#   2. 浮动主版本 tag（v1）前移到同一提交 → 消费方 `@v1` 自动拿到新版本
+# 参考 framework_sdk_worker ci-publish.yml `tag-release`、worker-actions release-actions-bundle.yml。
+# tag 用 WORKERS_WORLD_GHA_TOKEN 推送，才能触发 gh-release-on-tag（GITHUB_TOKEN 推的 tag 不触发下游 workflow）。
+# minor/major 发版：Actions → Release action tag → Run workflow（branch 选 master），填 version（如 1.2.0）。
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 可选 X.Y.Z；留空则 patch+1
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-action-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/heads/master
+          fetch-depth: 0
+          token: ${{ secrets.WORKERS_WORLD_GHA_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Create vX.Y.Z and move major tag
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force origin
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          SHA="$(git rev-parse HEAD)"
+          SEMVER_GLOB='v[0-9]*.[0-9]*.[0-9]*'
+          TAG_CREATED=0
+
+          on_head="$(git tag -l "${SEMVER_GLOB}" --points-at "${SHA}" | sort -V | tail -1 || true)"
+          latest="$(git tag -l "${SEMVER_GLOB}" --sort=-v:refname | head -1 || true)"
+
+          if [ -n "${INPUT_VERSION}" ]; then
+            VERSION="${INPUT_VERSION#v}"
+          elif [ -n "${on_head}" ]; then
+            VERSION="${on_head#v}"
+            echo "HEAD already tagged ${on_head}; only sync major tag"
+          elif [ -n "${latest}" ]; then
+            IFS=. read -r maj min pat <<< "${latest#v}"
+            VERSION="${maj}.${min}.$((pat + 1))"
+            echo "Auto bump patch: ${latest} → v${VERSION}"
+          else
+            VERSION="1.0.0"
+          fi
+
+          if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version 须为 X.Y.Z，当前: ${VERSION}"
+            exit 1
+          fi
+
+          TAG="v${VERSION}"
+          MAJOR_TAG="v${VERSION%%.*}"
+
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            EXISTING="$(git rev-list -n 1 "${TAG}")"
+            if [ "${EXISTING}" != "${SHA}" ]; then
+              echo "::error::tag ${TAG} exists at ${EXISTING} but HEAD is ${SHA}; refusing to move immutable tag"
+              exit 1
+            fi
+            echo "Skip: ${TAG} already at ${SHA}"
+          else
+            git tag -a "${TAG}" -m "Release ${TAG}" "${SHA}"
+            git push origin "refs/tags/${TAG}"
+            TAG_CREATED=1
+            echo "Created ${TAG} at ${SHA}"
+          fi
+
+          # 只在该版本是本主版本最高版本、且旧指针是 HEAD 祖先时前移 major tag（不回退、不跨分叉）
+          highest_in_major="$(git tag -l "${MAJOR_TAG}.[0-9]*.[0-9]*" --sort=-v:refname | head -1)"
+          MAJOR_MOVED=0
+          if [ "${highest_in_major}" != "${TAG}" ]; then
+            echo "::warning::${TAG} 不是 ${MAJOR_TAG} 最高版本（${highest_in_major}），不移动 ${MAJOR_TAG}"
+          else
+            if git rev-parse -q --verify "refs/tags/${MAJOR_TAG}" >/dev/null; then
+              OLD="$(git rev-list -n 1 "${MAJOR_TAG}")"
+              if [ "${OLD}" = "${SHA}" ]; then
+                echo "${MAJOR_TAG} already at ${SHA}"
+              elif ! git merge-base --is-ancestor "${OLD}" "${SHA}"; then
+                echo "::error::${MAJOR_TAG} (${OLD}) 不是 ${SHA} 的祖先，拒绝移动"
+                exit 1
+              else
+                git tag -fa "${MAJOR_TAG}" -m "Release ${TAG}" "${SHA}"
+                git push --force origin "refs/tags/${MAJOR_TAG}"
+                MAJOR_MOVED=1
+                echo "Moved ${MAJOR_TAG}: ${OLD} → ${SHA}"
+              fi
+            else
+              git tag -a "${MAJOR_TAG}" -m "Release ${TAG}" "${SHA}"
+              git push origin "refs/tags/${MAJOR_TAG}"
+              MAJOR_MOVED=1
+              echo "Created ${MAJOR_TAG} at ${SHA}"
+            fi
+          fi
+
+          {
+            echo "### Action released"
+            echo ""
+            echo "- **Tag**: \`${TAG}\` (created_this_run=${TAG_CREATED})"
+            echo "- **Major**: \`${MAJOR_TAG}\` (moved_this_run=${MAJOR_MOVED})"
+            echo "- **SHA**: \`${SHA}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
