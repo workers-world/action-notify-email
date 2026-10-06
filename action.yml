@@ -20,6 +20,10 @@ inputs:
     description: 邮件正文（HTML）；与 body 至少提供一个
     required: false
     default: ''
+  html-file:
+    description: 从文件读取 HTML 正文；与 html 同时存在时优先 html-file
+    required: false
+    default: ''
   to:
     description: 收件人，缺省使用 notify-worker 的 DEFAULT_TO
     required: false
@@ -58,6 +62,7 @@ runs:
         BODY: ${{ inputs.body }}
         BODY_FILE: ${{ inputs.body-file }}
         HTML: ${{ inputs.html }}
+        HTML_FILE: ${{ inputs.html-file }}
         TO: ${{ inputs.to }}
         DEDUP_KEY: ${{ inputs.dedup-key }}
         FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
@@ -98,7 +103,11 @@ runs:
         base_url="${NOTIFY_WORKER_URL%/}"
         endpoint="${base_url}/v1/send"
 
-        payload=$(python3 - <<'PY'
+        PAYLOAD_FILE="$(mktemp "${RUNNER_TEMP:-/tmp}/notify-email-payload.XXXXXX.json")"
+        trap 'rm -f "$PAYLOAD_FILE"' EXIT
+        export PAYLOAD_FILE
+
+        python3 - <<'PY'
         import json
         import os
 
@@ -109,7 +118,12 @@ runs:
                 body = handle.read()
         else:
             body = os.environ.get("BODY", "").strip()
-        html = os.environ.get("HTML", "").strip()
+        html_file = os.environ.get("HTML_FILE", "").strip()
+        if html_file:
+            with open(html_file, encoding="utf-8") as handle:
+                html = handle.read()
+        else:
+            html = os.environ.get("HTML", "").strip()
         if not subject:
             raise SystemExit("subject is required")
         if not body and not html:
@@ -126,16 +140,17 @@ runs:
         dedup = os.environ.get("DEDUP_KEY", "").strip()
         if dedup:
             data["dedupKey"] = dedup
-        print(json.dumps(data, ensure_ascii=False))
+
+        with open(os.environ["PAYLOAD_FILE"], "w", encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False)
         PY
-        )
 
         send_once() {
           curl -sS -w "\n%{http_code}" -X POST "$endpoint" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${NOTIFY_AUTH_TOKEN}" \
             -H "X-Notify-Source: github-actions" \
-            --data-binary "$payload"
+            --data-binary "@${PAYLOAD_FILE}"
         }
 
         parse_response() {
