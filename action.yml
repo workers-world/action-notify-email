@@ -24,6 +24,18 @@ inputs:
     description: 从文件读取 HTML 正文；与 html 同时存在时优先 html-file
     required: false
     default: ''
+  attachment-file:
+    description: 磁盘上的附件文件路径（如 CSV）；经 base64 编码写入 JSON attachments
+    required: false
+    default: ''
+  attachment-filename:
+    description: 附件在邮件中的文件名；缺省为 attachment-file 的 basename
+    required: false
+    default: ''
+  attachment-content-type:
+    description: 附件 MIME 类型；缺省按扩展名推断（如 .csv → text/csv）
+    required: false
+    default: ''
   to:
     description: 收件人，缺省使用 notify-worker 的 DEFAULT_TO
     required: false
@@ -63,6 +75,9 @@ runs:
         BODY_FILE: ${{ inputs.body-file }}
         HTML: ${{ inputs.html }}
         HTML_FILE: ${{ inputs.html-file }}
+        ATTACHMENT_FILE: ${{ inputs.attachment-file }}
+        ATTACHMENT_FILENAME: ${{ inputs.attachment-filename }}
+        ATTACHMENT_CONTENT_TYPE: ${{ inputs.attachment-content-type }}
         TO: ${{ inputs.to }}
         DEDUP_KEY: ${{ inputs.dedup-key }}
         FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
@@ -108,8 +123,18 @@ runs:
         export PAYLOAD_FILE
 
         python3 - <<'PY'
+        import base64
         import json
+        import mimetypes
         import os
+        from pathlib import Path
+
+        def infer_content_type(path: str) -> str:
+            ext = Path(path).suffix.lower()
+            if ext == ".csv":
+                return "text/csv"
+            guessed, _ = mimetypes.guess_type(path)
+            return guessed or "application/octet-stream"
 
         subject = os.environ["SUBJECT"].strip()
         body_file = os.environ.get("BODY_FILE", "").strip()
@@ -140,6 +165,24 @@ runs:
         dedup = os.environ.get("DEDUP_KEY", "").strip()
         if dedup:
             data["dedupKey"] = dedup
+
+        attachment_file = os.environ.get("ATTACHMENT_FILE", "").strip()
+        if attachment_file:
+            filename = os.environ.get("ATTACHMENT_FILENAME", "").strip()
+            if not filename:
+                filename = os.path.basename(attachment_file)
+            content_type = os.environ.get("ATTACHMENT_CONTENT_TYPE", "").strip()
+            if not content_type:
+                content_type = infer_content_type(attachment_file)
+            with open(attachment_file, "rb") as handle:
+                content_base64 = base64.b64encode(handle.read()).decode("ascii")
+            attachment = {
+                "filename": filename,
+                "contentBase64": content_base64,
+            }
+            if content_type:
+                attachment["contentType"] = content_type
+            data["attachments"] = [attachment]
 
         with open(os.environ["PAYLOAD_FILE"], "w", encoding="utf-8") as handle:
             json.dump(data, handle, ensure_ascii=False)
