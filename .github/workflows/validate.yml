@@ -21,3 +21,5 @@ jobs:
           grep -q 'name: Send notify email' action.yml
           grep -q 'X-Notify-Source: github-actions' action.yml
           grep -q 'TZ: Asia/Shanghai' action.yml
+          grep -q 'html-file:' action.yml
+          grep -qE 'data-binary "@\$\{PAYLOAD_FILE\}"' action.yml
