@@ -63,6 +63,9 @@ jobs:
 | `body-file` | 否* | — | 从文件读取纯文本正文；与 `body` 同时存在时优先 `body-file` |
 | `html` | 否* | — | HTML 正文（大体积 digest 请改用 `html-file`，避免 Actions 日志打印 `with:` 且绕过 shell ARG_MAX） |
 | `html-file` | 否* | — | 从文件读取 HTML 正文；与 `html` 同时存在时优先 `html-file` |
+| `attachment-file` | 否 | — | 磁盘上的附件路径；读取后 base64 编码为 `attachments[]`（不写入日志） |
+| `attachment-filename` | 否 | attachment-file 的 basename | 邮件中的附件文件名 |
+| `attachment-content-type` | 否 | 按扩展名推断（`.csv` → `text/csv`） | 附件 MIME 类型 |
 | `to` | 否 | — | 收件人；缺省用 notify-worker `DEFAULT_TO` |
 | `dedup-key` | 否 | — | KV 去重键，建议 `workflow-sha` |
 | `fail-on-error` | 否 | `true` | 发信失败是否 fail job |
@@ -81,6 +84,24 @@ jobs:
     html-file: digest.html
     dedup-key: digest-${{ github.sha }}
 ```
+
+带 CSV 附件（如 org-commit-digest）示例：
+
+```yaml
+- uses: workers-world/action-notify-email@v1
+  with:
+    subject: Weekly commit digest
+    html-file: digest.html
+    attachment-file: digest.csv
+    attachment-filename: commit-digest.csv
+    attachment-content-type: text/csv
+    dedup-key: digest-${{ github.sha }}
+  env:
+    NOTIFY_WORKER_URL: ${{ vars.NOTIFY_WORKER_URL }}
+    NOTIFY_AUTH_TOKEN: ${{ secrets.NOTIFY_GHA_TOKEN }}
+```
+
+POST JSON 中的 `attachments` 与 notify-worker / framework_sdk_worker 的 `NotifyAttachment` 一致：`filename`、`contentBase64`、可选 `contentType`。完整 payload 写入临时文件后由 `curl --data-binary @file` 发送，避免 shell 参数长度限制且不在日志中输出附件内容。
 
 ## Outputs
 
