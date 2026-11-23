@@ -126,11 +126,11 @@ POST JSON 中的 `attachments` 与 notify-worker / framework_sdk_worker 的 `Not
 
 **不要手工打 tag。** 发布全自动，版本权威 = [package.json](package.json) `version`（对齐 `framework_sdk_worker` / `worker-actions` / `ww` 语义）：
 
-1. 功能 PR 合入当前 `dev_*` → Validate 绿 → Promote 开/合 Release PR（`dev_*` → `master`）；**发版 = 在 Release PR 里本地 bump `package.json` `version`**
-2. push `master` 触发 [`release-tag.yml`](.github/workflows/release-tag.yml)：读 `version` 打不可变 tag，并把主版本指针 `v1` 前移到同一提交；**未 bump**（该版本 tag 已存在）→ 跳过，不发版
+1. **人工开 Release PR**（`dev_*` → `master`），在 PR 里**本地 bump** `package.json` `version`；Validate 在 PR 上把关——含**发版闸**：触及产品文件但未 bump 会 fail
+2. 合入 `master` 触发 [`release-tag.yml`](.github/workflows/release-tag.yml)：读 `version` 打不可变 tag，并把主版本指针 `v1` 前移到同一提交；**未 bump**（该版本 tag 已存在）→ 跳过，不发版
 3. `vX.Y.Z` tag 触发 [`gh-release-on-tag.yml`](.github/workflows/gh-release-on-tag.yml) 建 GitHub Release 页
 
-minor / major：常规在 Release PR 里 bump 到目标版本；应急可 Actions → **Release action tag** → Run workflow（branch 选 `master`），填写 `version`（如 `1.2.0`）。
+minor / major：常规在 Release PR 里 bump 到目标版本；应急可 Actions → **Release action tag** → Run workflow（branch 选 `master`），填写 `version`（如 `1.2.0`）；promote 同样仅应急 `workflow_dispatch`（旧自动 promote 已收掉）。
 
 消费方引用 `@v1` 即可跟踪同主版本更新（`v1` 仅由 CI 前移，带祖先校验，禁手工强推）。
 

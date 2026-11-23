@@ -1,6 +1,6 @@
 {
   "name": "action-notify-email",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "private": true,
   "description": "workers-world GitHub Action：发送 text + HTML 邮件通知（发信经 notify-worker 旁路）",
   "license": "MIT"
