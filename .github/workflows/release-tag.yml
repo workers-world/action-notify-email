@@ -1,18 +1,18 @@
 name: Release action tag
 
 # Release PR（dev_* → master）合入 = push master → 自动打 tag，禁止手工打 tag：
-#   1. 不可变 vX.Y.Z（默认在最新 vX.Y.Z 上 patch+1；HEAD 已有则复用，幂等）
+#   1. 不可变 vX.Y.Z（版本权威 = package.json version；Release PR 里本地 bump，未 bump 跳过）
 #   2. 浮动主版本 tag（v1）前移到同一提交 → 消费方 `@v1` 自动拿到新版本
 # 参考 framework_sdk_worker ci-publish.yml `tag-release`、worker-actions release-actions-bundle.yml。
 # tag 用 WORKERS_WORLD_GHA_TOKEN 推送，才能触发 gh-release-on-tag（GITHUB_TOKEN 推的 tag 不触发下游 workflow）。
-# minor/major 发版：Actions → Release action tag → Run workflow（branch 选 master），填 version（如 1.2.0）。
+# minor/major 发版：常规走 Release PR bump package.json；应急可 Actions → Release action tag → Run workflow 填 version。
 on:
   push:
     branches: [master]
   workflow_dispatch:
     inputs:
       version:
-        description: 可选 X.Y.Z；留空则 patch+1
+        description: 可选 X.Y.Z；留空则读 package.json version
         required: false
         type: string
         default: ""
@@ -52,20 +52,34 @@ jobs:
           SEMVER_GLOB='v[0-9]*.[0-9]*.[0-9]*'
           TAG_CREATED=0
 
+          # 版本权威 = package.json version（对齐 SDK / worker-actions / ww 语义）：Release PR 里本地 bump，bump 了才发
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if ! [[ "${PKG_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::package.json version 须为 X.Y.Z，当前: ${PKG_VERSION}"
+            exit 1
+          fi
+
           on_head="$(git tag -l "${SEMVER_GLOB}" --points-at "${SHA}" | sort -V | tail -1 || true)"
-          latest="$(git tag -l "${SEMVER_GLOB}" --sort=-v:refname | head -1 || true)"
 
           if [ -n "${INPUT_VERSION}" ]; then
+            # workflow_dispatch 指定版本：minor/major 或应急通道
             VERSION="${INPUT_VERSION#v}"
           elif [ -n "${on_head}" ]; then
             VERSION="${on_head#v}"
             echo "HEAD already tagged ${on_head}; only sync major tag"
-          elif [ -n "${latest}" ]; then
-            IFS=. read -r maj min pat <<< "${latest#v}"
-            VERSION="${maj}.${min}.$((pat + 1))"
-            echo "Auto bump patch: ${latest} → v${VERSION}"
+          elif git rev-parse -q --verify "refs/tags/v${PKG_VERSION}" >/dev/null; then
+            # package.json 未 bump（该版本已发过）→ 跳过发版（对齐 SDK：版本没变不打 tag）
+            echo "Skip release: v${PKG_VERSION} already exists; bump package.json version to release"
+            {
+              echo "### Action release skipped"
+              echo ""
+              echo "- package.json version \`${PKG_VERSION}\` 已发布为 \`v${PKG_VERSION}\`，本次合入未 bump 版本号，未打新 tag。"
+              echo "- 下次发版：在 Release PR 里 bump \`package.json\` 的 \`version\`（如 \`1.1.5\`）。"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           else
-            VERSION="1.0.0"
+            VERSION="${PKG_VERSION}"
+            echo "Release version from package.json: v${VERSION}"
           fi
 
           if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
