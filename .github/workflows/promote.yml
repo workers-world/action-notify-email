@@ -17,7 +17,7 @@ jobs:
   promote:
     # 写操作走 PAT；勿 contents:write 直推
     permissions: {}
-    uses: workers-world/worker-actions/.github/workflows/worker-promote.yml@actions/v0.2.33
+    uses: workers-world/worker-actions/.github/workflows/worker-promote.yml@actions/v0.2.68
     with:
       release_branch: ${{ inputs.release_branch }}
     secrets: inherit
