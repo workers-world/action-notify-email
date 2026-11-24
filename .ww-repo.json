@@ -1,4 +1,7 @@
 {
   "type": "action",
-  "npm": "@workers-world/action-notify-email"
+  "npm": "@workers-world/action-notify-email",
+  "deps": [
+    "worker-actions"
+  ]
 }
